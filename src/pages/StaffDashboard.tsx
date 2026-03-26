@@ -34,32 +34,91 @@ export default function StaffDashboard() {
   const [showReportForm, setShowReportForm] = useState(false);
   const [evidencePhoto, setEvidencePhoto] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
-  const [formData, setFormData] = useState({ studentId: '', studentName: '', department: '', category: '', description: '', dueDate: '', priority: 'medium' });
+  const [formData, setFormData] = useState({
+    studentId: '',
+    studentName: '',
+    department: '',
+    category: '',
+    description: '',
+    dueDate: '',
+    priority: 'medium',
+  });
 
   useEffect(() => { fetchViolations(); }, []);
 
   const fetchViolations = async () => {
-    try { const r = await api.get('/api/violations'); setViolations(r.data || []); }
-    catch (e) { console.error(e); } finally { setLoading(false); }
+    try {
+      const r = await api.get('/api/violations');
+      setViolations(r.data || []);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault(); setUploading(true);
+    e.preventDefault();
+    setUploading(true);
+
     try {
       let evidenceUrl = '';
+
       if (evidencePhoto) {
-        const pf = new FormData(); pf.append('photo', evidencePhoto);
-        const ur = await api.post('/api/upload/evidence', pf, { headers: { 'Content-Type': 'multipart/form-data' } });
+        // ✅ Frontend mime validation before sending
+        const allowedMimes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'];
+        const allowedExts = ['.jpg', '.jpeg', '.png', '.webp', '.gif'];
+        const ext = '.' + evidencePhoto.name.split('.').pop()?.toLowerCase();
+
+        if (!allowedMimes.includes(evidencePhoto.type) && !allowedExts.includes(ext)) {
+          alert('Please upload a valid image file (jpg, png, webp, gif)');
+          setUploading(false);
+          return;
+        }
+
+        const pf = new FormData();
+        pf.append('photo', evidencePhoto);
+
+        const ur = await api.post('/api/upload/evidence', pf, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
         evidenceUrl = ur.data.url;
       }
-      const response = await api.post('/api/violations', { student_id: formData.studentId, student_name: formData.studentName, department: formData.department, category: formData.category, description: formData.description, due_date: formData.dueDate, priority: formData.priority, evidence_url: evidenceUrl || null });
+
+      const response = await api.post('/api/violations', {
+        student_id: formData.studentId,
+        student_name: formData.studentName,
+        department: formData.department,
+        category: formData.category,
+        description: formData.description,
+        due_date: formData.dueDate,
+        priority: formData.priority,
+        evidence_url: evidenceUrl || null,
+      });
+
       const nv: Violation = response.data;
       let msg = 'Compliance issue reported successfully!';
-      if (nv.warning_level === 1) msg = `⚠️ Report submitted!\n\nWarning Issued: Complaint #${nv.repeat_count} for ${formData.studentName}.\nAction: ${nv.recommended_action}`;
-      else if (nv.warning_level !== undefined && nv.warning_level >= 2) msg = `🚨 Report submitted!\n\nParent/Guardian Alert: Complaint #${nv.repeat_count} for ${formData.studentName}.\nAction: ${nv.recommended_action}`;
+      if (nv.warning_level === 1)
+        msg = `⚠️ Report submitted!\n\nWarning Issued: Complaint #${nv.repeat_count} for ${formData.studentName}.\nAction: ${nv.recommended_action}`;
+      else if (nv.warning_level !== undefined && nv.warning_level >= 2)
+        msg = `🚨 Report submitted!\n\nParent/Guardian Alert: Complaint #${nv.repeat_count} for ${formData.studentName}.\nAction: ${nv.recommended_action}`;
+
       setFormData({ studentId: '', studentName: '', department: '', category: '', description: '', dueDate: '', priority: 'medium' });
-      setEvidencePhoto(null); setShowReportForm(false); fetchViolations(); alert(msg);
-    } catch (e) { console.error(e); alert('Failed to report compliance issue'); } finally { setUploading(false); }
+      setEvidencePhoto(null);
+      setShowReportForm(false);
+      fetchViolations();
+      alert(msg);
+
+   } catch (e: unknown) {
+  console.error(e);
+  // ✅ Properly typed error handling
+  const errMsg =
+    e instanceof Error
+      ? e.message
+      : (e as { response?: { data?: { message?: string } } })?.response?.data?.message
+      ?? 'Failed to report compliance issue';
+  alert(`Error: ${errMsg}`);
+}
   };
 
   const stats = {
@@ -74,7 +133,7 @@ export default function StaffDashboard() {
       {/* Background orbs */}
       <div className="fixed top-[-20%] left-[-15%] w-[55%] h-[55%] rounded-full bg-white/10 dark:bg-emerald-500/20 blur-[80px] pointer-events-none z-0" />
       <div className="fixed bottom-[-20%] right-[-15%] w-[55%] h-[55%] rounded-full bg-white/10 dark:bg-cyan-500/20 blur-[80px] pointer-events-none z-0" />
-      
+
       {/* Navbar */}
       <div className="relative z-10 border-b border-white/15 dark:border-white/5 bg-white/15 dark:bg-slate-900/90 backdrop-blur-xl">
         <div className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
@@ -181,7 +240,23 @@ export default function StaffDashboard() {
               <div>
                 <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Upload Evidence (Optional)</label>
                 <div className="border-2 border-dashed border-emerald-500/30 rounded-xl p-6 text-center bg-emerald-500/5 hover:bg-emerald-500/10 transition-colors">
-                  <input type="file" accept="image/*" onChange={e => setEvidencePhoto(e.target.files?.[0] || null)} className="w-full text-sm text-slate-500 dark:text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-emerald-50 dark:file:bg-emerald-500/20 file:text-emerald-700 dark:file:text-emerald-400 hover:file:bg-emerald-100 dark:hover:file:bg-emerald-500/30 cursor-pointer" />
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/jpg,image/png,image/webp,image/gif"
+                    onChange={e => setEvidencePhoto(e.target.files?.[0] || null)}
+                    className="w-full text-sm text-slate-500 dark:text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-emerald-50 dark:file:bg-emerald-500/20 file:text-emerald-700 dark:file:text-emerald-400 hover:file:bg-emerald-100 dark:hover:file:bg-emerald-500/30 cursor-pointer"
+                  />
+                  {/* ✅ Preview selected image */}
+                  {evidencePhoto && (
+                    <div className="mt-3">
+                      <img
+                        src={URL.createObjectURL(evidencePhoto)}
+                        alt="Preview"
+                        className="mx-auto max-h-32 rounded-lg object-cover border border-emerald-200 dark:border-emerald-500/30"
+                      />
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{evidencePhoto.name}</p>
+                    </div>
+                  )}
                 </div>
               </div>
 
